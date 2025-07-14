@@ -7,7 +7,7 @@ def ancho_consola():
     try:
         return os.get_terminal_size().columns
     except OSError:
-        return 80  
+        return 80  # Valor por defecto si no se puede obtener el tamaño
 
 def centrar(texto):
     ancho = ancho_consola()
@@ -20,6 +20,7 @@ def linea(char="=", longitud=56):
     return (char * longitud).center(ancho_consola())
 
 def pausar(mensaje="Presiona una tecla para continuar..."):
+    print()
     input(mensaje.center(ancho_consola()))
 
 def mostrar_titulo(texto):
@@ -32,4 +33,3 @@ def mostrar_titulo(texto):
 def input_centrado(texto):
     espacio = " " * ((ancho_consola() - len(texto)) // 2)
     return input(f"{espacio}{texto}")
-
