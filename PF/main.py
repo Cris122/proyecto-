@@ -1,59 +1,55 @@
-from utils import pantalla
-from datetime import datetime
-import controllers.inventario as inventario
-import controllers.clientes as clientes
-import controllers.ventas as ventas
+from auth.usuarios import SistemaUsuarios
+from funciones import *
+import inventario.inventario as inventario
+import clientes.clientes as clientes
+import ventas.ventas as ventas
 
-
-def menu_principal():
+def menu_principal(usuario_logueado, productos, lista_clientes, ventas_realizadas):
     while True:
-        pantalla.limpiar_pantalla()
-        pantalla.imprimir_centrado(pantalla.linea("="))
-        pantalla.imprimir_centrado("💎 SISTEMA DE GESTIÓN - JOYERÍA ORO & PLATA 💎")
-        pantalla.imprimir_centrado(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-        pantalla.imprimir_centrado(pantalla.linea("="))
-        print()
-        pantalla.imprimir_centrado("📋 MENÚ PRINCIPAL")
-        pantalla.imprimir_centrado(pantalla.linea("-"))
-        pantalla.imprimir_centrado("1. 🧾 Inventario")
-        pantalla.imprimir_centrado("2. 💰 Ventas")
-        pantalla.imprimir_centrado("3. 👥 Clientes")
-        pantalla.imprimir_centrado("0. ❌ Salir del sistema")
-        pantalla.imprimir_centrado(pantalla.linea("-"))
-        print()
-
-        prompt = "Seleccione una opción: "
-        espacio = " " * ((pantalla.ancho_consola() - len(prompt)) // 2)
-        opcion = input(f"{espacio}{prompt}").strip()
-
-        if not opcion.isdigit():
-            print()
-            pantalla.imprimir_centrado("❌ Entrada inválida. Solo números del menú.")
-            pantalla.pausar()
-            continue
+        opcion = mostrar_menu(
+            f"💎 SISTEMA DE GESTIÓN - JOYERÍA ORO & PLATA 💎\n"
+            f"Usuario: {usuario_logueado['nombre']} ({usuario_logueado['rol']})",
+            [
+                ("1", "📦 Gestión de Inventario"),
+                ("2", "💰 Gestión de Ventas"),
+                ("3", "👥 Gestión de Clientes"),
+                ("0", "🚪 Cerrar sesión")
+            ]
+        )
 
         match opcion:
             case "1":
-                pantalla.imprimir_centrado("🔄 Abriendo Inventario...")
-                pantalla.pausar()
-                inventario.menu_inventario()
+                inventario.menu_inventario(productos)
             case "2":
-                pantalla.imprimir_centrado("🔄 Abriendo Ventas...")
-                pantalla.pausar()
-                ventas.menu_ventas()
+                ventas.menu_ventas(productos, lista_clientes, ventas_realizadas)
             case "3":
-                pantalla.imprimir_centrado("🔄 Abriendo Clientes...")
-                pantalla.pausar()
-                clientes.menu_clientes()
+                clientes.menu_clientes(lista_clientes)
             case "0":
-                pantalla.imprimir_centrado("👋 Gracias por usar el sistema. ¡Hasta pronto!")
-                pantalla.pausar()
-                break
+                mostrar_mensaje(f"¡Hasta luego, {usuario_logueado['nombre']}!")
+                return
             case _:
-                print("")
-                pantalla.imprimir_centrado("❌ Opción no válida. Intente de nuevo.")
-                pantalla.pausar()
+                mostrar_mensaje("❌ Opción inválida", "error")
+                pausar()
 
+def main():
+    auth_system = SistemaUsuarios()
+    productos = []
+    lista_clientes = []
+    ventas_realizadas = []
+
+    while True:
+        usuario_logueado = auth_system.sistema_autenticacion()
+        if not usuario_logueado:
+            break
+
+        mostrar_mensaje(
+            f"¡Bienvenido/a {usuario_logueado['nombre']}! "
+            f"Rol: {usuario_logueado['rol'].capitalize()}",
+            "success"
+        )
+        pausar()
+        
+        menu_principal(usuario_logueado, productos, lista_clientes, ventas_realizadas)
 
 if __name__ == "__main__":
-    menu_principal()
+    main()
