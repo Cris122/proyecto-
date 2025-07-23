@@ -1,21 +1,70 @@
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from funciones import (
-    mostrar_menu, mostrar_mensaje, mostrar_titulo, mostrar_tabla, mostrar_progreso,
-    input_seguro, input_entero, input_flotante, confirmar_accion,
-    buscar_en_lista, buscar_en_lista_por_parcial, solicitar_datos_generico,
-    obtener_elemento_por_input, confirmar_accion_destructiva
-)
+from funciones import *
+from conexionBD import conexion, cursor
 
-# productos se pasa ahora desde main.py
-# def generar_id():
-#     return max((p["id"] for p in productos), default=0) + 1
+# Funciones de interacción con la base de datos para productos
+def buscar_producto_por_id_db(pid):
+    try:
+        cursor.execute("SELECT id, nombre, categoria, material, precio_compra, precio_venta, stock FROM productos WHERE id = %s", (pid,))
+        producto_data = cursor.fetchone()
+        if producto_data:
+            return {
+                "id": producto_data[0],
+                "nombre": producto_data[1],
+                "categoria": producto_data[2],
+                "material": producto_data[3],
+                "precio_compra": float(producto_data[4]),
+                "precio_venta": float(producto_data[5]),
+                "stock": producto_data[6]
+            }
+        return None
+    except Exception as e:
+        mostrar_mensaje(f"Error al buscar producto por ID: {e}", "error")
+        return None
 
-# def buscar_producto_por_id(pid):
-#     return buscar_en_lista(productos, "id", pid)
+def buscar_productos_por_nombre_parcial_db(termino):
+    try:
+        cursor.execute("SELECT id, nombre, categoria, material, precio_compra, precio_venta, stock FROM productos WHERE nombre LIKE %s", (f"%{termino}%",))
+        productos_data = cursor.fetchall()
+        lista_productos = []
+        for prod_row in productos_data:
+            lista_productos.append({
+                "id": prod_row[0],
+                "nombre": prod_row[1],
+                "categoria": prod_row[2],
+                "material": prod_row[3],
+                "precio_compra": float(prod_row[4]),
+                "precio_venta": float(prod_row[5]),
+                "stock": prod_row[6]
+            })
+        return lista_productos
+    except Exception as e:
+        mostrar_mensaje(f"Error al buscar productos por nombre: {e}", "error")
+        return []
 
-def menu_inventario(productos):
+def obtener_todos_los_productos_db():
+    try:
+        cursor.execute("SELECT id, nombre, categoria, material, precio_compra, precio_venta, stock FROM productos")
+        productos_data = cursor.fetchall()
+        lista_productos = []
+        for prod_row in productos_data:
+            lista_productos.append({
+                "id": prod_row[0],
+                "nombre": prod_row[1],
+                "categoria": prod_row[2],
+                "material": prod_row[3],
+                "precio_compra": float(prod_row[4]),
+                "precio_venta": float(prod_row[5]),
+                "stock": prod_row[6]
+            })
+        return lista_productos
+    except Exception as e:
+        mostrar_mensaje(f"Error al obtener productos: {e}", "error")
+        return []
+
+def menu_inventario(): # Ya no necesita productos como parámetro
     opciones = [
         ("1", "📦 Ver inventario"),
         ("2", "➕ Agregar producto"), 
@@ -30,19 +79,21 @@ def menu_inventario(productos):
         opcion = mostrar_menu("MENÚ DE INVENTARIO", opciones, "🧾 GESTIÓN DE PRODUCTOS 🧾")
         
         match opcion:
-            case "1": ver_inventario(productos)
-            case "2": agregar_producto(productos)
-            case "3": editar_producto(productos)
-            case "4": buscar_producto(productos)
-            case "5": eliminar_producto(productos)
-            case "6": restablecer_inventario(productos)
+            case "1": ver_inventario()
+            case "2": agregar_producto()
+            case "3": editar_producto()
+            case "4": buscar_producto()
+            case "5": eliminar_producto()
+            case "6": restablecer_inventario()
             case "0": break
             case _: mostrar_mensaje("Opción no válida.", "error")
 
-def ver_inventario(productos):
+def ver_inventario(): # Ya no necesita productos como parámetro
     mostrar_titulo("📦 INVENTARIO ACTUAL")
     
-    if not productos:
+    productos_db = obtener_todos_los_productos_db() # Obtener productos de la DB
+    
+    if not productos_db:
         mostrar_mensaje("El inventario está vacío.", "info")
         return
 
@@ -58,16 +109,16 @@ def ver_inventario(productos):
 
     # Formatear precios
     datos_formateados = []
-    for p in productos:
+    for p in productos_db:
         producto_formato = p.copy()
         producto_formato["precio_compra"] = f"${p['precio_compra']:.2f}"
         producto_formato["precio_venta"] = f"${p['precio_venta']:.2f}"
         datos_formateados.append(producto_formato)
 
-    mostrar_tabla(datos_formateados, headers, f"Total de productos: {len(productos)}")
-    mostrar_mensaje(f"Total de productos: {len(productos)}", "info", pausar_despues=True)
+    mostrar_tabla(datos_formateados, headers, f"Total de productos: {len(productos_db)}")
+    mostrar_mensaje(f"Total de productos: {len(productos_db)}", "info", pausar_despues=True)
 
-def agregar_producto(productos):
+def agregar_producto(): # Ya no necesita productos como parámetro
     # Definición de campos para solicitar_datos_generico
     campos_producto = [
         ("Nombre del producto", "nombre", "texto", None, None, None),
@@ -81,23 +132,34 @@ def agregar_producto(productos):
     datos = solicitar_datos_generico("➕ AGREGAR NUEVO PRODUCTO", campos_producto)
     
     if datos:
-        # Generar ID aquí, ya que 'productos' está disponible
-        new_id = max((p["id"] for p in productos), default=0) + 1
-        datos["id"] = new_id
-        productos.append(datos)
-        mostrar_mensaje(f"Producto '{datos['nombre']}' (ID: {datos['id']}) agregado correctamente.", "success")
+        try:
+            sql = """
+            INSERT INTO productos (nombre, categoria, material, precio_compra, precio_venta, stock)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql, (
+                datos["nombre"], datos["categoria"], datos["material"],
+                datos["precio_compra"], datos["precio_venta"], datos["stock"]
+            ))
+            conexion.commit()
+            mostrar_mensaje(f"Producto '{datos['nombre']}' agregado correctamente.", "success")
+        except Exception as e:
+            conexion.rollback()
+            mostrar_mensaje(f"Error al agregar producto: {e}", "error")
+        finally:
+            pausar()
     else:
         mostrar_mensaje("Operación cancelada. No se agregó ningún producto.", "warn")
+        pausar()
 
-def editar_producto(productos):
+def editar_producto(): # Ya no necesita productos como parámetro
     mostrar_titulo("✏️ EDITAR PRODUCTO")
     
-    # Usar la función plantilla para obtener el producto
+    # Usar la función plantilla para obtener el producto de la DB
     producto = obtener_elemento_por_input(
-        productos,
         "producto",
         lambda: input_entero("Ingrese el ID del producto a editar"),
-        lambda pid: buscar_en_lista(productos, "id", pid),
+        buscar_producto_por_id_db, # Función de búsqueda en DB
         "Producto no encontrado."
     )
     if not producto:
@@ -116,25 +178,45 @@ def editar_producto(productos):
 
     datos_actualizados = solicitar_datos_generico("✏️ EDITAR PRODUCTO", campos_producto, datos_existentes=producto.copy())
     if datos_actualizados:
-        producto.update(datos_actualizados)
-        mostrar_mensaje("Producto actualizado correctamente.", "success")
+        try:
+            sql = """
+            UPDATE productos SET
+                nombre = %s, categoria = %s, material = %s,
+                precio_compra = %s, precio_venta = %s, stock = %s
+            WHERE id = %s
+            """
+            cursor.execute(sql, (
+                datos_actualizados["nombre"], datos_actualizados["categoria"], datos_actualizados["material"],
+                datos_actualizados["precio_compra"], datos_actualizados["precio_venta"], datos_actualizados["stock"],
+                producto["id"]
+            ))
+            conexion.commit()
+            mostrar_mensaje("Producto actualizado correctamente.", "success")
+        except Exception as e:
+            conexion.rollback()
+            mostrar_mensaje(f"Error al actualizar producto: {e}", "error")
+        finally:
+            pausar()
     else:
         mostrar_mensaje("Operación cancelada. No se realizaron cambios.", "warn")
+        pausar()
 
-def buscar_producto(productos):
+def buscar_producto(): # Ya no necesita productos como parámetro
     mostrar_titulo("🔍 BUSCAR PRODUCTO")
     
     termino = input_seguro("Ingrese ID o parte del nombre del producto")
     if termino is None:
         return
 
+    encontrados = []
     # Buscar por ID si es número
     if termino.isdigit():
-        encontrados = [buscar_en_lista(productos, "id", int(termino))]
-        encontrados = [p for p in encontrados if p is not None] # Filtrar None si no se encontró
+        producto_encontrado = buscar_producto_por_id_db(int(termino))
+        if producto_encontrado:
+            encontrados.append(producto_encontrado)
     else:
         # Buscar por nombre parcial
-        encontrados = buscar_en_lista_por_parcial(productos, "nombre", termino)
+        encontrados = buscar_productos_por_nombre_parcial_db(termino)
 
     if encontrados:
         headers = [
@@ -153,16 +235,16 @@ def buscar_producto(productos):
         mostrar_tabla(datos_formateados, headers, f"Productos encontrados: {len(encontrados)}")
     else:
         mostrar_mensaje("No se encontraron productos con ese criterio.", "error")
+    pausar()
 
-def eliminar_producto(productos):
+def eliminar_producto(): # Ya no necesita productos como parámetro
     mostrar_titulo("🗑️ ELIMINAR PRODUCTO")
     
-    # Usar la función plantilla para obtener el producto
+    # Usar la función plantilla para obtener el producto de la DB
     producto = obtener_elemento_por_input(
-        productos,
         "producto",
         lambda: input_entero("Ingrese el ID del producto a eliminar"),
-        lambda pid: buscar_en_lista(productos, "id", pid),
+        buscar_producto_por_id_db, # Función de búsqueda en DB
         "Producto no encontrado."
     )
     if not producto:
@@ -180,15 +262,32 @@ def eliminar_producto(productos):
     mostrar_progreso(datos_producto)
 
     if confirmar_accion(f"¿Está seguro que desea eliminar el producto '{producto['nombre']}'? (s/n): "):
-        productos.remove(producto)
-        mostrar_mensaje(f"Producto '{producto['nombre']}' eliminado correctamente.", "success")
+        try:
+            # Primero, verificar si el producto tiene ventas asociadas
+            cursor.execute("SELECT COUNT(*) FROM ventas WHERE producto_id = %s", (producto['id'],))
+            if cursor.fetchone()[0] > 0:
+                mostrar_mensaje("No se puede eliminar el producto porque tiene ventas registradas.", "error")
+                pausar()
+                return
+
+            sql = "DELETE FROM productos WHERE id = %s"
+            cursor.execute(sql, (producto["id"],))
+            conexion.commit()
+            mostrar_mensaje(f"Producto '{producto['nombre']}' eliminado correctamente.", "success")
+        except Exception as e:
+            conexion.rollback()
+            mostrar_mensaje(f"Error al eliminar producto: {e}", "error")
+        finally:
+            pausar()
     else:
         mostrar_mensaje("Operación cancelada.", "warn")
+        pausar()
 
-def restablecer_inventario(productos):
+def restablecer_inventario(): # Ya no necesita productos como parámetro
     mostrar_titulo("🧹 RESTABLECER INVENTARIO")
     
-    if not productos:
+    productos_db = obtener_todos_los_productos_db()
+    if not productos_db:
         mostrar_mensaje("El inventario ya está vacío.", "info")
         return
         
@@ -196,9 +295,23 @@ def restablecer_inventario(productos):
         "⚠️ ADVERTENCIA: Esta acción eliminará TODOS los productos del inventario. ¡Esta acción es irreversible!",
         "ELIMINAR TODO"
     ):
-        cantidad_eliminada = len(productos)
-        productos.clear()
-        mostrar_mensaje(f"Inventario restablecido. Se eliminaron {cantidad_eliminada} productos.", "success")
+        try:
+            # Verificar si hay ventas asociadas a algún producto
+            cursor.execute("SELECT COUNT(*) FROM ventas")
+            if cursor.fetchone()[0] > 0:
+                mostrar_mensaje("No se puede restablecer el inventario porque hay ventas registradas.", "error")
+                mostrar_mensaje("Elimine las ventas primero si desea restablecer el inventario.", "info")
+                pausar()
+                return
+
+            cursor.execute("DELETE FROM productos")
+            conexion.commit()
+            mostrar_mensaje(f"Inventario restablecido. Se eliminaron {len(productos_db)} productos.", "success")
+        except Exception as e:
+            conexion.rollback()
+            mostrar_mensaje(f"Error al restablecer inventario: {e}", "error")
+        finally:
+            pausar()
     else:
         mostrar_mensaje("Operación cancelada.", "warn")
-
+        pausar()

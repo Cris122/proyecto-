@@ -2,22 +2,101 @@ import sys
 import os
 from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from funciones import (
-    mostrar_menu, mostrar_mensaje, mostrar_titulo, mostrar_tabla, mostrar_progreso,
-    input_seguro, input_entero, confirmar_accion, validar_email,
-    buscar_en_lista, buscar_en_lista_por_parcial, obtener_elemento_por_input
-)
+from funciones import *
+from conexionBD import conexion, cursor
+# Importar funciones de búsqueda de productos y clientes desde sus módulos
+from inventario.inventario import buscar_producto_por_id_db, obtener_todos_los_productos_db
+from clientes.clientes import buscar_cliente_por_correo_db
 
-# Las listas se pasan ahora desde main.py
-# from inventario.inventario import productos, buscar_producto_por_id
-# from clientes.clientes import lista_clientes
+# Funciones de interacción con la base de datos para ventas
+def obtener_todas_las_ventas_db():
+    try:
+        sql = """
+        SELECT v.id, v.fecha, c.nombre AS cliente_nombre, c.correo AS cliente_correo,
+               p.nombre AS producto_nombre, v.cantidad, v.precio_unitario, v.total
+        FROM ventas v
+        JOIN clientes c ON v.cliente_id = c.id
+        JOIN productos p ON v.producto_id = p.id
+        ORDER BY v.fecha DESC
+        """
+        cursor.execute(sql)
+        ventas_data = cursor.fetchall()
+        lista_ventas = []
+        for venta_row in ventas_data:
+            lista_ventas.append({
+                "id": venta_row[0],
+                "fecha": venta_row[1].strftime("%d/%m/%Y %H:%M:%S"), # Formatear datetime
+                "cliente": venta_row[2],
+                "correo": venta_row[3],
+                "producto": venta_row[4],
+                "cantidad": venta_row[5],
+                "precio_unitario": float(venta_row[6]),
+                "total": float(venta_row[7])
+            })
+        return lista_ventas
+    except Exception as e:
+        mostrar_mensaje(f"Error al obtener ventas: {e}", "error")
+        return []
 
-# ventas_realizadas se pasa ahora desde main.py
+def buscar_venta_por_id_db(vid):
+    try:
+        sql = """
+        SELECT v.id, v.fecha, c.nombre AS cliente_nombre, c.correo AS cliente_correo,
+               p.nombre AS producto_nombre, v.cantidad, v.precio_unitario, v.total
+        FROM ventas v
+        JOIN clientes c ON v.cliente_id = c.id
+        JOIN productos p ON v.producto_id = p.id
+        WHERE v.id = %s
+        """
+        cursor.execute(sql, (vid,))
+        venta_data = cursor.fetchone()
+        if venta_data:
+            return {
+                "id": venta_data[0],
+                "fecha": venta_data[1].strftime("%d/%m/%Y %H:%M:%S"),
+                "cliente": venta_data[2],
+                "correo": venta_data[3],
+                "producto": venta_data[4],
+                "cantidad": venta_data[5],
+                "precio_unitario": float(venta_data[6]),
+                "total": float(venta_data[7])
+            }
+        return None
+    except Exception as e:
+        mostrar_mensaje(f"Error al buscar venta por ID: {e}", "error")
+        return None
 
-# def buscar_cliente_por_correo(correo):
-#     return buscar_en_lista(lista_clientes, "correo", correo.lower())
+def buscar_ventas_por_cliente_parcial_db(termino):
+    try:
+        sql = """
+        SELECT v.id, v.fecha, c.nombre AS cliente_nombre, c.correo AS cliente_correo,
+               p.nombre AS producto_nombre, v.cantidad, v.precio_unitario, v.total
+        FROM ventas v
+        JOIN clientes c ON v.cliente_id = c.id
+        JOIN productos p ON v.producto_id = p.id
+        WHERE c.nombre LIKE %s
+        ORDER BY v.fecha DESC
+        """
+        cursor.execute(sql, (f"%{termino}%",))
+        ventas_data = cursor.fetchall()
+        lista_ventas = []
+        for venta_row in ventas_data:
+            lista_ventas.append({
+                "id": venta_row[0],
+                "fecha": venta_row[1].strftime("%d/%m/%Y %H:%M:%S"),
+                "cliente": venta_row[2],
+                "correo": venta_row[3],
+                "producto": venta_row[4],
+                "cantidad": venta_row[5],
+                "precio_unitario": float(venta_row[6]),
+                "total": float(venta_row[7])
+            })
+        return lista_ventas
+    except Exception as e:
+        mostrar_mensaje(f"Error al buscar ventas por cliente: {e}", "error")
+        return []
 
-def menu_ventas(productos, lista_clientes, ventas_realizadas):
+def menu_ventas(): # Ya no necesita productos, lista_clientes, ventas_realizadas como parámetros
     opciones = [
         ("1", "🛒 Registrar venta"),
         ("2", "📜 Ver historial"),
@@ -30,18 +109,18 @@ def menu_ventas(productos, lista_clientes, ventas_realizadas):
         opcion = mostrar_menu("MENÚ DE VENTAS", opciones, "💰 GESTIÓN DE VENTAS 💰")
         
         match opcion:
-            case "1": registrar_venta(productos, lista_clientes, ventas_realizadas)
-            case "2": ver_historial(ventas_realizadas)
-            case "3": ver_estadisticas(ventas_realizadas)
-            case "4": buscar_venta(ventas_realizadas)
+            case "1": registrar_venta()
+            case "2": ver_historial()
+            case "3": ver_estadisticas()
+            case "4": buscar_venta()
             case "0": break
             case _: mostrar_mensaje("Opción no válida.", "error")
 
-def obtener_productos_disponibles(productos):
-    return [p for p in productos if p["stock"] > 0]
+def obtener_productos_disponibles(): # Obtiene de la DB
+    return [p for p in obtener_todos_los_productos_db() if p["stock"] > 0]
 
-def mostrar_productos_disponibles(productos):
-    productos_stock = obtener_productos_disponibles(productos)
+def mostrar_productos_disponibles_para_venta(): # Adaptado para la DB
+    productos_stock = obtener_productos_disponibles()
     
     if not productos_stock:
         mostrar_mensaje("No hay productos disponibles en stock.", "error")
@@ -64,8 +143,8 @@ def mostrar_productos_disponibles(productos):
     mostrar_tabla(datos_formateados, headers, "PRODUCTOS DISPONIBLES")
     return True
 
-def obtener_cliente(correo, lista_clientes):
-    cliente = buscar_en_lista(lista_clientes, "correo", correo.lower())
+def obtener_o_crear_cliente(correo): # Adaptado para la DB
+    cliente = buscar_cliente_por_correo_db(correo)
     
     if cliente:
         mostrar_mensaje(f"Cliente encontrado: {cliente['nombre']}", "success", pausar_despues=False)
@@ -77,20 +156,24 @@ def obtener_cliente(correo, lista_clientes):
     if not nombre:
         return None
     
-    cliente = {
-        "nombre": nombre,
-        "correo": correo.lower(),
-        "compras": []
-    }
-    lista_clientes.append(cliente)
-    mostrar_mensaje(f"Cliente '{nombre}' registrado correctamente.", "success")
-    return cliente
+    try:
+        sql = "INSERT INTO clientes (nombre, correo) VALUES (%s, %s)"
+        cursor.execute(sql, (nombre, correo.lower()))
+        conexion.commit()
+        # Obtener el ID del cliente recién insertado
+        cliente_id = cursor.lastrowid
+        mostrar_mensaje(f"Cliente '{nombre}' registrado correctamente.", "success")
+        return {"id": cliente_id, "nombre": nombre, "correo": correo.lower()}
+    except Exception as e:
+        conexion.rollback()
+        mostrar_mensaje(f"Error al registrar nuevo cliente: {e}", "error")
+        return None
 
-def registrar_venta(productos, lista_clientes, ventas_realizadas):
+def registrar_venta(): # Ya no necesita productos, lista_clientes, ventas_realizadas como parámetros
     mostrar_titulo("🛒 REGISTRAR NUEVA VENTA")
     
     # Verificar productos disponibles
-    if not mostrar_productos_disponibles(productos):
+    if not mostrar_productos_disponibles_para_venta():
         return
     
     # Obtener correo del cliente
@@ -100,17 +183,16 @@ def registrar_venta(productos, lista_clientes, ventas_realizadas):
         return
     
     # Obtener o crear cliente
-    cliente = obtener_cliente(correo, lista_clientes)
+    cliente = obtener_o_crear_cliente(correo)
     if not cliente:
         mostrar_mensaje("Venta cancelada.", "warn")
         return
     
     # Seleccionar producto
     producto = obtener_elemento_por_input(
-        productos,
         "producto",
         lambda: input_entero("ID del producto a vender"),
-        lambda pid: buscar_en_lista(productos, "id", pid),
+        buscar_producto_por_id_db, # Función de búsqueda en DB
         "Producto no encontrado."
     )
     if not producto:
@@ -147,36 +229,49 @@ def registrar_venta(productos, lista_clientes, ventas_realizadas):
         mostrar_mensaje("Venta cancelada.", "warn")
         return
     
-    # Procesar venta
-    producto["stock"] -= cantidad
-    cliente["compras"].append(total)
-    
-    venta = {
-        "id": len(ventas_realizadas) + 1,
-        "fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "cliente": cliente["nombre"],
-        "correo": cliente["correo"],
-        "producto": producto["nombre"],
-        "cantidad": cantidad,
-        "precio_unitario": producto["precio_venta"],
-        "total": total
-    }
-    
-    ventas_realizadas.append(venta)
-    
-    mostrar_titulo("✅ VENTA EXITOSA")
-    resultado = {
-        "ID de venta": f"#{venta['id']}",
-        "Total cobrado": f"${total:.2f}",
-        "Stock restante": f"{producto['stock']} unidades"
-    }
-    mostrar_progreso(resultado)
-    mostrar_mensaje("¡Venta registrada correctamente!", "success")
+    # Procesar venta en la base de datos
+    try:
+        # 1. Registrar la venta
+        sql_venta = """
+        INSERT INTO ventas (fecha, cliente_id, producto_id, cantidad, precio_unitario, total)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(sql_venta, (
+            datetime.now(), cliente["id"], producto["id"], cantidad,
+            producto["precio_venta"], total
+        ))
+        venta_id = cursor.lastrowid # Obtener el ID de la venta recién insertada
 
-def ver_historial(ventas_realizadas):
+        # 2. Actualizar el stock del producto
+        sql_update_stock = "UPDATE productos SET stock = stock - %s WHERE id = %s"
+        cursor.execute(sql_update_stock, (cantidad, producto["id"]))
+        
+        conexion.commit() # Confirmar ambas operaciones
+        
+        # Actualizar el stock en el objeto producto para mostrarlo
+        producto["stock"] -= cantidad
+
+        mostrar_titulo("✅ VENTA EXITOSA")
+        resultado = {
+            "ID de venta": f"#{venta_id}",
+            "Total cobrado": f"${total:.2f}",
+            "Stock restante": f"{producto['stock']} unidades"
+        }
+        mostrar_progreso(resultado)
+        mostrar_mensaje("¡Venta registrada correctamente!", "success")
+
+    except Exception as e:
+        conexion.rollback() # Revertir si algo falla
+        mostrar_mensaje(f"Error al registrar venta: {e}", "error")
+    finally:
+        pausar()
+
+def ver_historial(): # Ya no necesita ventas_realizadas como parámetro
     mostrar_titulo("📜 HISTORIAL DE VENTAS")
     
-    if not ventas_realizadas:
+    ventas_realizadas_db = obtener_todas_las_ventas_db()
+    
+    if not ventas_realizadas_db:
         mostrar_mensaje("No hay ventas registradas.", "info")
         return
     
@@ -191,38 +286,40 @@ def ver_historial(ventas_realizadas):
     
     # Formatear datos
     datos_formateados = []
-    for v in ventas_realizadas:
+    for v in ventas_realizadas_db:
         venta_formato = v.copy()
         venta_formato["total"] = f"${v['total']:.2f}"
         datos_formateados.append(venta_formato)
     
-    total_ventas = sum(v['total'] for v in ventas_realizadas)
+    total_ventas = sum(v['total'] for v in ventas_realizadas_db)
     mostrar_tabla(datos_formateados, headers, 
-                 f"Total recaudado: ${total_ventas:.2f} | Ventas realizadas: {len(ventas_realizadas)}")
-    mostrar_mensaje(f"Total recaudado: ${total_ventas:.2f} | Ventas realizadas: {len(ventas_realizadas)}", "info", pausar_despues=True)
+                 f"Total recaudado: ${total_ventas:.2f} | Ventas realizadas: {len(ventas_realizadas_db)}")
+    mostrar_mensaje(f"Total recaudado: ${total_ventas:.2f} | Ventas realizadas: {len(ventas_realizadas_db)}", "info", pausar_despues=True)
 
-def ver_estadisticas(ventas_realizadas):
+def ver_estadisticas(): # Ya no necesita ventas_realizadas como parámetro
     mostrar_titulo("📊 ESTADÍSTICAS DE VENTAS")
     
-    if not ventas_realizadas:
+    ventas_realizadas_db = obtener_todas_las_ventas_db()
+    
+    if not ventas_realizadas_db:
         mostrar_mensaje("No hay ventas registradas para mostrar estadísticas.", "info")
         return
     
     # Cálculos generales
-    total_recaudado = sum(v['total'] for v in ventas_realizadas)
-    promedio_venta = total_recaudado / len(ventas_realizadas) if ventas_realizadas else 0
-    total_productos_vendidos = sum(v['cantidad'] for v in ventas_realizadas)
+    total_recaudado = sum(v['total'] for v in ventas_realizadas_db)
+    promedio_venta = total_recaudado / len(ventas_realizadas_db) if ventas_realizadas_db else 0
+    total_productos_vendidos = sum(v['cantidad'] for v in ventas_realizadas_db)
     
     # Producto más vendido
     productos_cantidad = {}
-    for v in ventas_realizadas:
+    for v in ventas_realizadas_db:
         productos_cantidad[v['producto']] = productos_cantidad.get(v['producto'], 0) + v['cantidad']
     
     producto_estrella = max(productos_cantidad.items(), key=lambda x: x[1]) if productos_cantidad else ("N/A", 0)
     
     # Mejor cliente
     clientes_total = {}
-    for v in ventas_realizadas:
+    for v in ventas_realizadas_db:
         clientes_total[v['cliente']] = clientes_total.get(v['cliente'], 0) + v['total']
     
     mejor_cliente = max(clientes_total.items(), key=lambda x: x[1]) if clientes_total else ("N/A", 0)
@@ -231,7 +328,7 @@ def ver_estadisticas(ventas_realizadas):
     estadisticas = {
         "💰 RESUMEN FINANCIERO": "",
         "Total recaudado": f"${total_recaudado:.2f}",
-        "Ventas realizadas": len(ventas_realizadas),
+        "Ventas realizadas": len(ventas_realizadas_db),
         "Promedio por venta": f"${promedio_venta:.2f}",
         "Productos vendidos": f"{total_productos_vendidos} unidades",
         "": "",
@@ -243,10 +340,11 @@ def ver_estadisticas(ventas_realizadas):
     mostrar_progreso(estadisticas)
     mostrar_mensaje("Estadísticas mostradas.", "info", pausar_despues=True)
 
-def buscar_venta(ventas_realizadas):
+def buscar_venta(): # Ya no necesita ventas_realizadas como parámetro
     mostrar_titulo("🔍 BUSCAR VENTAS")
     
-    if not ventas_realizadas:
+    ventas_realizadas_db = obtener_todas_las_ventas_db()
+    if not ventas_realizadas_db:
         mostrar_mensaje("No hay ventas registradas.", "info")
         return
     
@@ -254,12 +352,15 @@ def buscar_venta(ventas_realizadas):
     if not termino:
         return
     
+    encontradas = []
     # Buscar por ID si es número
     if termino.isdigit():
-        encontradas = [v for v in ventas_realizadas if v['id'] == int(termino)]
+        venta_encontrada = buscar_venta_por_id_db(int(termino))
+        if venta_encontrada:
+            encontradas.append(venta_encontrada)
     else:
         # Buscar por nombre de cliente
-        encontradas = buscar_en_lista_por_parcial(ventas_realizadas, "cliente", termino)
+        encontradas = buscar_ventas_por_cliente_parcial_db(termino)
     
     if encontradas:
         headers = [
@@ -280,4 +381,4 @@ def buscar_venta(ventas_realizadas):
         mostrar_tabla(datos_formateados, headers, f"Ventas encontradas: {len(encontradas)}")
     else:
         mostrar_mensaje("No se encontraron ventas con ese criterio.", "error")
-
+    pausar()

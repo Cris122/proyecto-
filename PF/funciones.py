@@ -3,6 +3,7 @@ import shutil
 import re
 from datetime import datetime
 import hashlib
+import sys # Importar sys para sys.exit
 
 # ------------------------ Consola ------------------------
 
@@ -204,18 +205,14 @@ def confirmar_accion_destructiva(mensaje_advertencia, palabra_clave_confirmacion
     respuesta = input_centrado("Confirmación: ")
     return respuesta == palabra_clave_confirmacion
 
-# ------------------------ Búsquedas ------------------------
+# ------------------------ Búsquedas (Adaptadas para DB) ------------------------
+# Estas funciones ahora son más genéricas y se usarán con funciones de búsqueda de DB
+# en los módulos específicos (usuarios, clientes, inventario, ventas)
 
-def buscar_en_lista(lista, clave, valor):
-    return next((item for item in lista if item.get(clave) == valor), None)
-
-def buscar_en_lista_por_parcial(lista, clave, parcial):
-    return [item for item in lista if parcial.lower() in item.get(clave, "").lower()]
-
-def obtener_elemento_por_input(lista, tipo_elemento, input_label, buscar_func, mensaje_no_encontrado):
-    """Función plantilla para obtener un elemento de una lista mediante input del usuario"""
+def obtener_elemento_por_input(tipo_elemento, input_label_func, buscar_func, mensaje_no_encontrado):
+    """Función plantilla para obtener un elemento mediante input del usuario y una función de búsqueda de DB"""
     while True:
-        identificador = input_label()
+        identificador = input_label_func()
         if identificador is None:
             return None
         
@@ -243,7 +240,7 @@ def solicitar_datos_generico(titulo_principal, campos, datos_existentes=None):
     
     for label, clave, tipo, validador, min_val, max_val in campos:
         predeterminado = datos.get(clave)
-        label_con_default = f"{label} (actual: {predeterminado})" if predeterminado else label
+        label_con_default = f"{label} (actual: {predeterminado})" if predeterminado is not None else label
 
         # Seleccionar función de input según el tipo
         input_func = {
